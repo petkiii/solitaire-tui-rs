@@ -1,11 +1,12 @@
 use std::time::Instant;
 
 use anyhow::{Error, Result, anyhow};
-use crossterm::event::{Event, KeyCode, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+#[cfg(debug_assertions)]
+use crossterm::event::KeyCode;
+use crossterm::event::{Event, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
 
 use crate::{
     engine::{
-        Engine,
         card::Card,
         game_state::{AutoMove, Move},
     },
@@ -82,7 +83,7 @@ impl Game {
 
     #[cfg(debug_assertions)]
     fn load_autofinish_ready(&mut self) {
-        use crate::engine::game_state::GameState;
+        use crate::engine::{Engine, game_state::GameState};
 
         self.engine = Engine::from_state(GameState::autofinish_ready());
         self.board_hit_kind = None;
