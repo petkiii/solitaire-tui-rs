@@ -1,0 +1,28 @@
+[package]
+name = "solitaire-tui-rs"
+version = "0.1.0"
+edition = "2024"
+description = "Mouse-first Klondike solitaire for the terminal"
+readme = "README.md"
+repository = "https://github.com/petkiii/solitaire-tui-rs"
+license = "MIT"                                                 # Replace with chosen SPDX license
+
+keywords = ["solitaire", "klondike", "terminal", "tui", "game"]
+categories = ["games", "command-line-utilities"]
+[profile.release-debug-info]
+inherits = "dev"
+opt-level = 1
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4", features = ["derive"] }
+crossterm = "0.29.0"
+dirs = "6"
+rand = "0.10.2"
+ratatui = "0.30.0"
+ahash = "0.8.12"
+smallvec = "1.15.1"
+tachyonfx = "0.25.0"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+thiserror = "2.0"

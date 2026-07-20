@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug ratatui (neovim)",
+      "type": "codelldb",
+      "request": "attach",
+      "pid": "${command:pickProcess}"
+    },
+    {
+      "name": "Debug ratatui (vscode+wsl)",
+      "type": "lldb",
+      "request": "attach",
+      "pid": "${command:pickMyProcess}"
+    }
+  ]
+}
