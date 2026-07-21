@@ -3,7 +3,9 @@ use std::time::Instant;
 use anyhow::{Error, Result, anyhow};
 #[cfg(debug_assertions)]
 use crossterm::event::KeyCode;
-use crossterm::event::{Event, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    Event as CrosstermEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind,
+};
 
 use crate::{
     engine::{
@@ -13,16 +15,17 @@ use crate::{
     ui::{
         action::Action,
         animations::game::GameAnimations,
-        component::Component,
+        component::{Component, UpdateResult},
         components::{
             pause_overlay::{PauseAction, PauseOverlay},
             win_overlay::WinOverlay,
         },
+        event::AppEvent,
         hit_test,
         keymap::GAME_KEYMAP,
         screens::game::{
-            AUTOFINISH_STEP, Autofinish, BoardHit, BoardHitKind, Drag, Game, GameError, HelpAction,
-            Hint, HintTarget,
+            AUTOFINISH_STEP, Autofinish, BoardHit, BoardHitKind, Drag, ERROR_TTL, Game, GameError,
+            HINT_TTL, HelpAction, Hint, HintTarget,
         },
     },
 };
@@ -194,15 +197,14 @@ impl Game {
         self.check_for_autofinish();
     }
 
-    // TODO: implement event based tick system
-    pub(super) fn step_autofinish(&mut self) {
+    pub(super) fn step_autofinish(&mut self, now: Instant) {
         if self.autofinish.is_none() {
             return;
         }
 
         let step = self.autofinish.as_mut().and_then(|af| {
-            if af.last_step.elapsed() >= AUTOFINISH_STEP {
-                af.last_step = Instant::now();
+            if now.duration_since(af.last_step) >= AUTOFINISH_STEP {
+                af.last_step = now;
                 af.moves.pop_front()
             } else {
                 None
@@ -227,10 +229,11 @@ impl Game {
         }
     }
 
-    fn handle_mouse_down(&mut self, mouse: MouseEvent) {
+    /// Returns whether significant mutation happened
+    fn handle_mouse_down(&mut self, mouse: MouseEvent) -> bool {
         let board_hit = hit_test(&self.board_hits, mouse.column, mouse.row);
         let Some(board_hit) = board_hit else {
-            return;
+            return false;
         };
 
         self.board_hit_kind = match board_hit.kind {
@@ -246,7 +249,7 @@ impl Game {
         };
 
         let Some(cards) = self.get_dragged_cards(board_hit) else {
-            return;
+            return self.board_hit_kind.is_some();
         };
 
         let offset_x = mouse.column.saturating_sub(board_hit.area.x);
@@ -261,31 +264,37 @@ impl Game {
             offset: (offset_x, offset_y),
             started: false,
         });
+
+        true
     }
 
-    fn handle_mouse_drag(&mut self, mouse: MouseEvent) {
+    /// Returns whether significant mutation happened
+    fn handle_mouse_drag(&mut self, mouse: MouseEvent) -> bool {
         let Some(drag) = self.drag.as_mut() else {
-            return;
+            return false;
         };
 
         if drag.initial_cursor == (mouse.column, mouse.row) {
-            return;
+            return false;
         }
 
         drag.cursor = (mouse.column, mouse.row);
         drag.started = true;
+
+        true
     }
 
-    fn handle_mouse_up(&mut self, mouse: MouseEvent) {
+    /// Returns whether significant mutation happened
+    fn handle_mouse_up(&mut self, mouse: MouseEvent) -> bool {
         let drag = self.drag.take();
 
         let Some(mouse_down_hit_kind) = self.board_hit_kind.take() else {
-            return;
+            return false;
         };
 
         let hit = hit_test(&self.board_hits, mouse.column, mouse.row);
         let Some(mouse_up_hit_kind) = hit.map(|hit| hit.kind) else {
-            return;
+            return true;
         };
 
         let res = if drag.is_some_and(|d| d.started) {
@@ -304,6 +313,8 @@ impl Game {
             self.check_for_win();
             self.check_for_autofinish();
         }
+
+        true
     }
 
     fn apply_undo(&mut self) {
@@ -470,14 +481,19 @@ impl Game {
         }
     }
 
-    pub(super) fn update_internal(&mut self, event: Event) -> Option<Action> {
-        if let Event::Resize(_, _) = event {
-            self.card_layout_dirty = true;
+    pub(super) fn update_internal(&mut self, event: AppEvent) -> UpdateResult<Action> {
+        if let AppEvent::Tick(now) = &event {
+            return self.handle_tick(*now).into();
         }
+
+        if let AppEvent::Input(CrosstermEvent::Resize(..)) = &event {
+            self.card_layout_dirty = true;
+            return UpdateResult::Changed;
+        };
 
         // autofinish playback ignores input
         if self.autofinish.is_some() {
-            return None;
+            return UpdateResult::Unchanged;
         }
 
         // pause overlay captures all input while open
@@ -487,58 +503,102 @@ impl Game {
 
         // victory screen
         if self.won {
-            return self.win_overlay.as_mut().and_then(|w| w.update(event));
+            return self
+                .win_overlay
+                .as_mut()
+                .map_or(UpdateResult::Unchanged, |w| w.update(event));
         }
 
         // handle key and mouse events
-        match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                _ if GAME_KEYMAP.pause.matches(key) => self.show_pause(),
-                _ if GAME_KEYMAP.undo.matches(key) => self.apply_undo(),
-                _ if GAME_KEYMAP.hint.matches(key) => self.show_hint(),
-                _ if GAME_KEYMAP.autofinish.matches(key) && self.autofinish_available => {
-                    self.start_autofinish()
+        if let AppEvent::Input(event) = &event {
+            match event {
+                CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => {
+                    let mut changed = true;
+                    match key.code {
+                        _ if GAME_KEYMAP.pause.matches(*key) => self.show_pause(),
+                        _ if GAME_KEYMAP.undo.matches(*key) => self.apply_undo(),
+                        _ if GAME_KEYMAP.hint.matches(*key) => self.show_hint(),
+                        _ if GAME_KEYMAP.autofinish.matches(*key) && self.autofinish_available => {
+                            self.start_autofinish()
+                        }
+                        #[cfg(debug_assertions)]
+                        _ if key.code == KeyCode::Char('r') => self.trigger_win(),
+                        #[cfg(debug_assertions)]
+                        _ if key.code == KeyCode::Char('t') => self.load_autofinish_ready(),
+                        _ => changed = false,
+                    };
+
+                    if changed {
+                        return UpdateResult::Changed;
+                    }
                 }
-                #[cfg(debug_assertions)]
-                _ if key.code == KeyCode::Char('r') => self.trigger_win(),
-                #[cfg(debug_assertions)]
-                _ if key.code == KeyCode::Char('t') => self.load_autofinish_ready(),
+                CrosstermEvent::Mouse(mouse) => {
+                    let res = match mouse.kind {
+                        MouseEventKind::Down(MouseButton::Left) => self.handle_mouse_down(*mouse),
+                        MouseEventKind::Drag(_) => self.handle_mouse_drag(*mouse),
+                        MouseEventKind::Up(MouseButton::Left) => self.handle_mouse_up(*mouse),
+                        _ => false,
+                    };
+
+                    if res {
+                        return UpdateResult::Changed;
+                    }
+                }
                 _ => {}
-            },
-            Event::Mouse(mouse) => match mouse.kind {
-                MouseEventKind::Down(MouseButton::Left) => self.handle_mouse_down(mouse),
-                MouseEventKind::Drag(_) => self.handle_mouse_drag(mouse),
-                MouseEventKind::Up(MouseButton::Left) => self.handle_mouse_up(mouse),
-                _ => {}
-            },
-            _ => {}
+            }
         }
 
         // update help
-        let help_kind = self.help.update(event)?;
-        match help_kind {
-            HelpAction::Undo => self.apply_undo(),
-            HelpAction::Hint => self.show_hint(),
-            HelpAction::Menu => self.show_pause(),
-            HelpAction::Quit => return Some(Action::Quit),
-            HelpAction::Autofinish => self.start_autofinish(),
-        };
+        let help_kind = self.help.update(event);
+        help_kind.and_then(|a| {
+            match a {
+                HelpAction::Undo => self.apply_undo(),
+                HelpAction::Hint => self.show_hint(),
+                HelpAction::Menu => self.show_pause(),
+                HelpAction::Quit => return UpdateResult::Action(Action::Quit),
+                HelpAction::Autofinish => self.start_autofinish(),
+            };
 
-        None
+            UpdateResult::Changed
+        })
     }
 
-    fn update_pause_overlay(&mut self, event: Event) -> Option<Action> {
-        let pause = self.pause_overlay.as_mut()?;
-        let action = pause.update(event)?;
-        match action {
+    fn handle_tick(&mut self, now: Instant) -> bool {
+        self.step_autofinish(now);
+
+        if self
+            .hint
+            .as_ref()
+            .is_some_and(|hint| now.saturating_duration_since(hint.displayed_at) >= HINT_TTL)
+        {
+            self.hint = None;
+        }
+
+        if self
+            .error
+            .as_ref()
+            .is_some_and(|error| now.saturating_duration_since(error.displayed_at) >= ERROR_TTL)
+        {
+            self.error = None;
+        }
+
+        true
+    }
+
+    fn update_pause_overlay(&mut self, event: AppEvent) -> UpdateResult<Action> {
+        let Some(pause) = self.pause_overlay.as_mut() else {
+            return UpdateResult::Unchanged;
+        };
+
+        pause.update(event).and_then(|a| match a {
             PauseAction::Resume => {
                 self.pause_overlay = None;
                 self.timer.resume();
-                None
+                UpdateResult::Changed
             }
-            PauseAction::NewRandomGame => Some(Action::NewRandomGame),
-            PauseAction::GoToMenu => Some(Action::GoToMenu),
-            PauseAction::Quit => Some(Action::Quit),
-        }
+            PauseAction::NewRandomGame => UpdateResult::Action(Action::NewRandomGame),
+            PauseAction::GoToMenu => UpdateResult::Action(Action::GoToMenu),
+            PauseAction::Quit => UpdateResult::Action(Action::Quit),
+        })
     }
 }

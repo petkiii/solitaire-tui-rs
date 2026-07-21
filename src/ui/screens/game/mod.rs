@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::Error;
-use crossterm::event::Event;
 use ratatui::{Frame, layout::Rect};
 
 use crate::{
@@ -14,13 +13,14 @@ use crate::{
         Hit,
         action::Action,
         animations::{Animator, game::GameAnimations},
-        component::Component,
+        component::{Component, UpdateResult},
         components::{
             interactive_help::{HelpItem, InteractiveHelpComponent},
             pause_overlay::PauseOverlay,
             win_overlay::WinOverlay,
         },
         config::Config,
+        event::AppEvent,
         keymap::{GAME_KEYMAP, GLOBAL_KEYMAP},
         screens::game::timer::Timer,
         theme::Theme,
@@ -200,14 +200,34 @@ impl Game {
             win_overlay: None,
         }
     }
+
+    pub(crate) fn is_animating(&self) -> bool {
+        self.animator.is_running()
+    }
 }
 
 impl Component<Action> for Game {
-    fn update(&mut self, event: Event) -> Option<Action> {
+    fn update(&mut self, event: AppEvent) -> UpdateResult<Action> {
         self.update_internal(event)
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.render_internal(frame, area);
+    }
+
+    fn next_tick(&mut self, now: Instant) -> Option<Instant> {
+        [
+            self.timer.next_second_tick(now),
+            self.autofinish
+                .as_ref()
+                .map(|autofinish| autofinish.last_step + AUTOFINISH_STEP),
+            self.hint.as_ref().map(|hint| hint.displayed_at + HINT_TTL),
+            self.error
+                .as_ref()
+                .map(|error| error.displayed_at + ERROR_TTL),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 }

@@ -7,8 +7,8 @@ use crate::ui::{
     RectExt,
     component::Component,
     screens::game::{
-        BoardHit, BoardHitKind, CardSize, ERROR_TTL, Game, GameError, HINT_TTL, Hint, HintTarget,
-        MARGIN, MIN_CARD_HEIGHT, MIN_CARD_WIDTH,
+        BoardHit, BoardHitKind, CardSize, Game, GameError, Hint, HintTarget, MARGIN,
+        MIN_CARD_HEIGHT, MIN_CARD_WIDTH,
     },
     widgets::card::{CardBackWidget, CardWidget, DragStackWidget, EmptyWidget},
 };
@@ -319,23 +319,6 @@ impl Game {
 
     pub(super) fn render_internal(&mut self, frame: &mut Frame, area: Rect) {
         self.board_hits.clear();
-
-        // advance autofinish playback with the render ticks
-        self.step_autofinish();
-
-        // hint expiration
-        if let Some(hint) = &self.hint
-            && hint.displayed_at.elapsed() >= HINT_TTL
-        {
-            self.hint = None;
-        }
-
-        // error expiration
-        if let Some(game_error) = &self.error
-            && game_error.displayed_at.elapsed() >= ERROR_TTL
-        {
-            self.error = None;
-        }
 
         let [board, help, hud] = Layout::default()
             .direction(Direction::Vertical)

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crossterm::event::{Event, KeyEventKind};
+use crossterm::event::{Event as CrosstermEvent, KeyEventKind};
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
@@ -11,8 +11,9 @@ use tachyonfx::RefRect;
 
 use crate::ui::{
     action::Action,
-    component::Component,
+    component::{Component, UpdateResult},
     components::interactive_help::{HelpItem, InteractiveHelpComponent},
+    event::AppEvent,
     keymap::GAME_KEYMAP,
     theme::OverlayStyles,
 };
@@ -57,18 +58,25 @@ impl WinOverlay {
 }
 
 impl Component<Action> for WinOverlay {
-    fn update(&mut self, event: Event) -> Option<Action> {
-        match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                _ if GAME_KEYMAP.new_solvable.matches(key) => Some(Action::NewSolvableGame),
-                _ if GAME_KEYMAP.new_random.matches(key) => Some(Action::NewRandomGame),
-                _ if GAME_KEYMAP.go_to_menu.matches(key) || GAME_KEYMAP.pause.matches(key) => {
-                    Some(Action::GoToMenu)
+    fn update(&mut self, event: AppEvent) -> UpdateResult<Action> {
+        if let AppEvent::Input(CrosstermEvent::Key(key)) = event
+            && key.kind == KeyEventKind::Press
+        {
+            match key.code {
+                _ if GAME_KEYMAP.new_solvable.matches(key) => {
+                    return UpdateResult::Action(Action::NewSolvableGame);
                 }
-                _ => None,
-            },
-            _ => self.help.update(event),
-        }
+                _ if GAME_KEYMAP.new_random.matches(key) => {
+                    return UpdateResult::Action(Action::NewRandomGame);
+                }
+                _ if GAME_KEYMAP.go_to_menu.matches(key) || GAME_KEYMAP.pause.matches(key) => {
+                    return UpdateResult::Action(Action::GoToMenu);
+                }
+                _ => {}
+            }
+        };
+
+        self.help.update(event)
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect)

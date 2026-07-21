@@ -2,7 +2,6 @@ use std::{rc::Rc, sync::OnceLock};
 
 use ratatui::{
     Frame,
-    crossterm::event::Event,
     layout::{Constraint, Layout, Rect},
     text::Text,
     widgets::Block,
@@ -13,12 +12,13 @@ use crate::ui::{
     RectExt,
     action::Action,
     animations::{Animator, logo::LogoAnimations},
-    component::Component,
+    component::{Component, UpdateResult},
     components::{
         help::{HelpComponent, HelpItem},
         menu::{MenuComponent, MenuItem},
     },
     config::Config,
+    event::AppEvent,
     keymap::{GLOBAL_KEYMAP, MENU_KEYMAP},
     theme::Theme,
 };
@@ -116,18 +116,19 @@ impl MainMenu {
             help,
         }
     }
+
+    pub(crate) fn is_animating(&self) -> bool {
+        self.animator.is_running()
+    }
 }
 
 impl Component<Action> for MainMenu {
-    fn update(&mut self, event: Event) -> Option<Action> {
-        match event {
-            Event::Key(_) | Event::Mouse(_) => self.menu.update(event).map(|action| match action {
-                MenuAction::NewRandomGame => Action::NewRandomGame,
-                MenuAction::NewSolvableGame => Action::NewSolvableGame,
-                MenuAction::Quit => Action::Quit,
-            }),
-            _ => None,
-        }
+    fn update(&mut self, event: AppEvent) -> UpdateResult<Action> {
+        self.menu.update(event).map(|a| match a {
+            MenuAction::NewRandomGame => Action::NewRandomGame,
+            MenuAction::NewSolvableGame => Action::NewSolvableGame,
+            MenuAction::Quit => Action::Quit,
+        })
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {

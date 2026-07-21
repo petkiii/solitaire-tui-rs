@@ -6,7 +6,7 @@ use std::{
 use anyhow::{Result, anyhow};
 use ratatui::{
     DefaultTerminal, Frame,
-    crossterm::event::{self, Event, KeyEventKind},
+    crossterm::event::{Event as CrosstermEvent, KeyEventKind},
     layout::{
         Constraint::{self},
         Rect,
@@ -18,8 +18,9 @@ use crate::{
     StartKind,
     ui::{
         action::Action,
-        component::Component,
+        component::{Component, UpdateResult},
         config::Config,
+        event::{self, AppEvent, Event},
         keymap::GLOBAL_KEYMAP,
         screens::{Screen, game::Game},
         theme::Theme,
@@ -70,49 +71,65 @@ impl App {
 
         terminal.draw(|frame| self.draw(frame))?;
 
-        let mut next_frame = Instant::now() + frame_time;
+        self.run_lazy(terminal, frame_time)
+    }
+
+    fn run_lazy(&mut self, mut terminal: DefaultTerminal, frame_time: Duration) -> Result<()> {
+        let mut next_frame = Instant::now();
+        let mut redraw = true;
 
         while self.running {
-            let now = Instant::now();
-            let timeout = next_frame.saturating_duration_since(now);
+            let next_tick = self.screen.next_tick(Instant::now());
+            let next_render = if redraw || self.screen.is_animating() {
+                Some(next_frame)
+            } else {
+                None
+            };
+            let event = event::next_event(next_render, next_tick)?;
 
-            self.update(timeout)?;
+            match event {
+                Event::Render => {
+                    let now = Instant::now();
+                    terminal.draw(|frame| self.draw(frame))?;
 
-            let now = Instant::now();
-            if now >= next_frame {
-                terminal.draw(|frame| self.draw(frame))?;
+                    if self.config.show_fps {
+                        self.update_fps();
+                    }
 
-                if self.config.show_fps {
-                    self.update_fps();
+                    redraw = false;
+                    next_frame = now + frame_time;
                 }
-
-                next_frame = now + frame_time;
+                Event::AppEvent(app_event) => redraw |= self.update(app_event)?,
             }
         }
 
         Ok(())
     }
 
-    fn update(&mut self, timeout: Duration) -> Result<()> {
-        if !event::poll(timeout)? {
-            return Ok(());
+    fn update(&mut self, event: AppEvent) -> Result<bool> {
+        let mut resized = false;
+
+        if let AppEvent::Input(crossterm_event) = &event {
+            match crossterm_event {
+                CrosstermEvent::Key(key)
+                    if key.kind == KeyEventKind::Press && (GLOBAL_KEYMAP.quit.matches(*key)) =>
+                {
+                    self.apply_action(Action::Quit);
+                    return Ok(true);
+                }
+                CrosstermEvent::Resize(_, _) => resized = true,
+                _ => {}
+            }
+        };
+
+        match self.screen.update(event) {
+            UpdateResult::Unchanged => Ok(resized),
+            UpdateResult::Changed => Ok(true),
+            UpdateResult::Action(action) => {
+                self.apply_action(action);
+                Ok(true)
+            }
         }
-
-        let event = event::read()?;
-
-        if let Event::Key(key) = event
-            && key.kind == KeyEventKind::Press
-            && (GLOBAL_KEYMAP.quit.matches(key))
-        {
-            self.apply_action(Action::Quit);
-            return Ok(());
-        }
-
-        if let Some(action) = self.screen.update(event) {
-            self.apply_action(action);
-        }
-
-        Ok(())
     }
 
     fn apply_action(&mut self, action: Action) {

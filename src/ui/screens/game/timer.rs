@@ -40,11 +40,24 @@ impl Timer {
         }
     }
 
-    pub(crate) fn elapsed(&self) -> Duration {
+    pub(crate) fn elapsed_at(&self, now: Instant) -> Duration {
         self.accumulated
             + self
                 .started_at
-                .map_or(Duration::ZERO, |since| since.elapsed())
+                .map_or(Duration::ZERO, |started_at| now.duration_since(started_at))
+    }
+
+    pub(crate) fn next_second_tick(&self, now: Instant) -> Option<Instant> {
+        self.started_at?;
+
+        let elapsed = self.elapsed_at(now);
+        let next_second = Duration::from_secs(elapsed.as_secs() + 1);
+
+        Some(now + next_second.saturating_sub(elapsed))
+    }
+
+    pub(crate) fn elapsed(&self) -> Duration {
+        self.elapsed_at(Instant::now())
     }
 
     #[allow(dead_code)]

@@ -6,6 +6,7 @@ pub(crate) mod app;
 mod component;
 mod components;
 pub(crate) mod config;
+pub(crate) mod event;
 mod keymap;
 mod screens;
 mod theme;

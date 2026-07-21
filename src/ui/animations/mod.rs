@@ -38,7 +38,6 @@ impl Animator {
         effects.add_effect(effect);
     }
 
-    #[allow(dead_code)]
     pub(crate) fn is_running(&self) -> bool {
         let Animator::Enabled {
             effects,

@@ -2,7 +2,6 @@ use std::{mem, rc::Rc};
 
 use ratatui::{
     Frame,
-    crossterm::event::Event,
     layout::Rect,
     text::{Line, Span},
 };
@@ -140,10 +139,6 @@ impl HelpComponent {
 }
 
 impl Component<()> for HelpComponent {
-    fn update(&mut self, _: Event) -> Option<()> {
-        None
-    }
-
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.render_internal(frame, area);
     }

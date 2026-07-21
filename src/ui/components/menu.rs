@@ -8,7 +8,12 @@ use ratatui::{
 };
 use tachyonfx::CenteredShrink;
 
-use crate::ui::{component::Component, keymap::MENU_KEYMAP, theme::MenuStyles};
+use crate::ui::{
+    component::{Component, UpdateResult},
+    event::AppEvent,
+    keymap::MENU_KEYMAP,
+    theme::MenuStyles,
+};
 
 const HORIZONTAL_PADDING: u16 = 2;
 
@@ -82,14 +87,25 @@ impl<T> Component<T> for MenuComponent<T>
 where
     T: Copy + 'static,
 {
-    fn update(&mut self, event: Event) -> Option<T> {
+    fn update(&mut self, event: AppEvent) -> UpdateResult<T> {
+        let AppEvent::Input(event) = event else {
+            return UpdateResult::Unchanged;
+        };
+
         match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                _ if MENU_KEYMAP.previous.matches(key) => self.item_prev(),
-                _ if MENU_KEYMAP.next.matches(key) => self.item_next(),
-                _ if MENU_KEYMAP.confirm.matches(key) => return Some(self.item_enter()),
-                _ => {}
-            },
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                let mut changed = true;
+                match key.code {
+                    _ if MENU_KEYMAP.previous.matches(key) => self.item_prev(),
+                    _ if MENU_KEYMAP.next.matches(key) => self.item_next(),
+                    _ if MENU_KEYMAP.confirm.matches(key) => {
+                        return UpdateResult::Action(self.item_enter());
+                    }
+                    _ => changed = false,
+                }
+
+                return changed.into();
+            }
             Event::Mouse(mouse)
                 if matches!(
                     mouse.kind,
@@ -102,17 +118,20 @@ where
                     .find(|x| x.area.contains(Position::new(mouse.column, mouse.row)));
 
                 if let Some(hit) = hit {
+                    let prev_idx = self.selected_index;
                     self.selected_index = hit.idx;
 
                     if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                        return Some(self.item_enter());
+                        return UpdateResult::Action(self.item_enter());
                     }
+
+                    return (prev_idx != self.selected_index).into();
                 }
             }
             _ => {}
         }
 
-        None
+        UpdateResult::Unchanged
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {

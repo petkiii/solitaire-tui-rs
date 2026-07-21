@@ -3,7 +3,7 @@ use std::rc::Rc;
 use crossterm::event::KeyEventKind;
 use ratatui::{
     Frame,
-    crossterm::event::Event,
+    crossterm::event::Event as CrosstermEvent,
     layout::Rect,
     text::Line,
     widgets::{Block, Borders, Clear},
@@ -11,8 +11,9 @@ use ratatui::{
 use tachyonfx::CenteredShrink;
 
 use crate::ui::{
-    component::Component,
+    component::{Component, UpdateResult},
     components::menu::{MenuComponent, MenuItem},
+    event::AppEvent,
     keymap::GAME_KEYMAP,
     theme::OverlayStyles,
 };
@@ -63,16 +64,15 @@ impl PauseOverlay {
 }
 
 impl Component<PauseAction> for PauseOverlay {
-    fn update(&mut self, event: Event) -> Option<PauseAction> {
-        match event {
-            Event::Key(key)
-                if key.kind == KeyEventKind::Press && GAME_KEYMAP.pause.matches(key) =>
-            {
-                Some(PauseAction::Resume)
-            }
-            Event::Key(_) | Event::Mouse(_) => self.menu.update(event),
-            _ => None,
-        }
+    fn update(&mut self, app_event: AppEvent) -> UpdateResult<PauseAction> {
+        if let AppEvent::Input(CrosstermEvent::Key(key)) = app_event
+            && key.kind == KeyEventKind::Press
+            && GAME_KEYMAP.pause.matches(key)
+        {
+            return UpdateResult::Action(PauseAction::Resume);
+        };
+
+        self.menu.update(app_event)
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {

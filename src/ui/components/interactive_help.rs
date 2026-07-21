@@ -3,12 +3,18 @@ use std::{mem, rc::Rc};
 use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::{
     Frame,
-    crossterm::event::Event,
+    crossterm::event::Event as CrosstermEvent,
     layout::Rect,
     text::{Line, Span},
 };
 
-use crate::ui::{Hit, component::Component, hit_test, theme::HelpStyles};
+use crate::ui::{
+    Hit,
+    component::{Component, UpdateResult},
+    event::AppEvent,
+    hit_test,
+    theme::HelpStyles,
+};
 
 const ITEM_SEPARATOR: &str = " • ";
 const ITEM_SEPARATOR_WIDTH: u16 = 3;
@@ -160,23 +166,26 @@ impl<T> Component<T> for InteractiveHelpComponent<T>
 where
     T: PartialEq + Copy,
 {
-    fn update(&mut self, event: Event) -> Option<T> {
-        let Event::Mouse(mouse) = event else {
-            return None;
+    fn update(&mut self, event: AppEvent) -> UpdateResult<T> {
+        let AppEvent::Input(CrosstermEvent::Mouse(mouse)) = event else {
+            return UpdateResult::Unchanged;
         };
 
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                return hit_test(&self.hits, mouse.column, mouse.row).map(|hit| hit.kind);
+                hit_test(&self.hits, mouse.column, mouse.row)
+                    .map(|hit| hit.kind)
+                    .into()
             }
             MouseEventKind::Moved => {
-                self.hovered_action =
-                    hit_test(&self.hits, mouse.column, mouse.row).map(|hit| hit.kind)
-            }
-            _ => {}
-        };
+                let action = hit_test(&self.hits, mouse.column, mouse.row).map(|hit| hit.kind);
+                let changed = self.hovered_action != action;
+                self.hovered_action = action;
 
-        None
+                changed.into()
+            }
+            _ => UpdateResult::Unchanged,
+        }
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
