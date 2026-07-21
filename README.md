@@ -1,9 +1,13 @@
+
+
+
+
 # solitaire-tui-rs
 
 Mouse-first Klondike solitaire for the terminal, built with Rust and [Ratatui](https://ratatui.rs).  
 Inspired by tty-solitaire and [solitaire-tui](https://github.com/brianstrauch/solitaire-tui).
 
-[SHOWCASE](https://github.com/user-attachments/assets/c0e11f24-6096-40f8-992e-d7d9197ccadf)
+[SHOWCASE](https://github.com/user-attachments/assets/188d2234-686e-462c-81b9-d44a0c4f2c8e)
 
 ## Installation
 
