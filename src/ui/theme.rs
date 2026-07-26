@@ -89,7 +89,7 @@ impl Theme {
     }
 
     fn gruvbox() -> Self {
-        let bg = Color::Rgb(0x28, 0x28, 0x28);
+        let bg = Color::Reset;
         let fg = Color::Rgb(0xeb, 0xdb, 0xb2);
         let muted = Color::Rgb(0x92, 0x83, 0x74);
         let hud_bg = Color::Rgb(0x3c, 0x38, 0x36);
@@ -99,7 +99,7 @@ impl Theme {
 
         let menu_items = Rc::new(MenuStyles {
             normal: Style::default().fg(fg).bg(bg),
-            selected: Style::default().fg(bg).bg(fg),
+            selected: Style::default().fg(Color::Rgb(0x28, 0x28, 0x28)).bg(fg),
         });
         let help = Rc::new(HelpStyles {
             text: Style::default().fg(muted).bg(bg),
