@@ -5,10 +5,11 @@ edition = "2024"
 description = "Mouse-first Klondike solitaire for the terminal"
 readme = "README.md"
 repository = "https://github.com/petkiii/solitaire-tui-rs"
-license = "MIT"                                                 # Replace with chosen SPDX license
+license = "MIT"
 
 keywords = ["solitaire", "klondike", "terminal", "tui", "game"]
 categories = ["games", "command-line-utilities"]
+
 [profile.release-debug-info]
 inherits = "dev"
 opt-level = 1
